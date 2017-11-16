@@ -711,5 +711,66 @@ extension DownloadRequest {
     }
 }
 
+// MARK: - Object
+
+extension Request {
+    /// Returns a codable object contained in a result type constructed from the response data using
+    ///
+    /// - parameter response: The response from the server.
+    /// - parameter data:     The data returned from the server.
+    /// - parameter error:    The error already encountered if it exists.
+    ///
+    /// - returns: The result data type.
+    public static func serializeResponseObject<T: Codable>(
+        response: HTTPURLResponse?,
+        data: Data?,
+        error: Error?)
+        -> Result<T>
+    {
+        guard error == nil else { return .failure(error!) }
+        do {
+            guard let wrapData = data else {
+                return .failure(AFError.responseSerializationFailed(reason: .inputDataNilOrZeroLength))
+            }
+            let object = try JSONDecoder().decode(T.self, from: wrapData)
+            return .success(object)
+        } catch let error {
+            return .failure(error)
+        }
+    }
+}
+
+extension DataRequest {
+    /// Creates a response serializer that returns an object constructed from the response data using
+    ///
+    /// - returns: A object response serializer.
+    public static func objectResponseSerializer<T: Codable>()
+        -> DataResponseSerializer<T>
+    {
+        return DataResponseSerializer { _, response, data, error in
+            return Request.serializeResponseObject(response: response, data: data, error: error)
+        }
+    }
+    
+    
+    /// Adds a handler to be called once the request has finished.
+    ///
+    /// - parameter completionHandler: A closure to be executed once the request has finished.
+    ///
+    /// - returns: The request.
+    @discardableResult
+    public func responseObject<T: Codable>(
+        queue: DispatchQueue? = nil,
+        completionHandler: @escaping (DataResponse<T>) -> Void)
+        -> Self
+    {
+        return response(
+            queue: queue,
+            responseSerializer: DataRequest.objectResponseSerializer(),
+            completionHandler: completionHandler
+        )
+    }
+}
+
 /// A set of HTTP response status code that do not contain response data.
 private let emptyDataStatusCodes: Set<Int> = [204, 205]
